@@ -7,10 +7,10 @@ LIBS		= -LBOOM -lBOOM -LGSL -lgsl -lm -lgslcblas
 BOOM		= BOOM
 OBJ		= obj
 
+all:	BOOM obj sim likelihood train to-cnf
+
 BOOM:
 	@echo please install BOOM library first
-
-all:	BOOM obj sim likelihood train to-cnf
 
 obj:
 	mkdir obj
