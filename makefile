@@ -10,7 +10,8 @@ OBJ		= obj
 all:	BOOM obj sim likelihood train to-cnf
 
 BOOM:
-	@echo please install BOOM library first
+	@echo please install BOOM library first ; \
+	exit 1
 
 obj:
 	mkdir obj
