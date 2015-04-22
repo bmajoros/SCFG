@@ -6,6 +6,7 @@
  ****************************************************************/
 #include <math.h>
 #include <iostream>
+#include <fstream>
 #include "BOOM/String.H"
 #include "BOOM/CommandLine.H"
 #include "BOOM/FastaReader.H"
@@ -28,7 +29,7 @@ class Application {
   BinaryProductions binaryProductions;
   void getAlphabet(SCFG &,Alphabet &);
   float update(SCFG &,Vector<Sequence> &);
-  void output(SCFG &);
+  void output(SCFG &,ostream &);
 public:
   Application();
   int main(int argc,char *argv[]);
@@ -76,14 +77,16 @@ Application::Application()
 int Application::main(int argc,char *argv[])
 {
   // Process command line
-  CommandLine cmd(argc,argv,"");
+  CommandLine cmd(argc,argv,"l:");
   if(cmd.numArgs()!=3)
     throw String("\n\
 train [options] <grammar.cnf> <seq.fasta> <max-iter>\n\
+    -l filestem = log files (filestem#.txt)\n\
 ");
   const String grammarFile=cmd.arg(0);
   const String fastaFile=cmd.arg(1);
   const int maxIter=cmd.arg(2).asInt();
+  const bool wantLogs=cmd.option('l');
 
   // Load and recode grammar using binary productions for fast indexing
   SCFG G(grammarFile);
@@ -102,12 +105,17 @@ train [options] <grammar.cnf> <seq.fasta> <max-iter>\n\
   // Do N iterations of training
   for(int i=0 ; i<maxIter ; ++i) {
     cerr<<"iteration #"<<(i+1)<<"\t"; cerr.flush();
+    if(wantLogs) {
+      String filename=cmd.optParm('l')+i+".txt";
+      ofstream os(filename.c_str());
+      output(G,os);
+    }
     float lik=update(G,seqs);
     cerr<<lik<<endl;
   }
 
   // Output trained grammar
-  output(G);
+  output(G,cout);
 
   return 0;
 }
@@ -145,6 +153,7 @@ float Application::update(SCFG &G,Vector<Sequence> &seqs)
     Inside inside(S,binaryProductions);
     Outside outside(S,binaryProductions,inside);
     float insideLik=inside.likelihood();
+    cout<<"\t";S.printOn(cout,alphabet); cout<<" = "<<insideLik<<endl;//###
     lik+=insideLik;
 
     Array1D< Vector<float> > ntLogProbs(numNonterminals);    // A
@@ -214,13 +223,13 @@ float Application::update(SCFG &G,Vector<Sequence> &seqs)
 
 
 
-void Application::output(SCFG &G)
+void Application::output(SCFG &G,ostream &os)
 {
   GrammarAlphabet &terminals=G.getTerminals();
   GrammarAlphabet &nonterminals=G.getNonterminals();
   const int startID=binaryProductions.getStartSymbol();
   String startName=nonterminals[startID]->getLexeme();
-  cout<<"start "<<startName<<endl;
+  os<<"start "<<startName<<endl;
   for(Vector<BinaryProduction>::const_iterator cur=binaryProductions.begin(), 
 	end=binaryProductions.end() ; cur!=end ; ++cur) {
     const BinaryProduction &prod=*cur;
@@ -228,8 +237,8 @@ void Application::output(SCFG &G)
     String rhs0=nonterminals[prod.RHS()[0]]->getLexeme();
     String rhs1=nonterminals[prod.RHS()[1]]->getLexeme();
     float P=prod.P();
-    if(P>0) cout<<lhs<<" -> "<<rhs0<<" "<<rhs1<<" {"<<P<<"}"<<endl;
-    else cerr<<"DELETED: "<<lhs<<" -> "<<rhs0<<" "<<rhs1<<" {"<<P<<"}"<<endl;
+    if(P>0) os<<lhs<<" -> "<<rhs0<<" "<<rhs1<<" {"<<P<<"}"<<endl;
+    else os<<"//DELETED: "<<lhs<<" -> "<<rhs0<<" "<<rhs1<<" {"<<P<<"}"<<endl;
   }
   const int numTerminals=terminals.size();
   for(int i=0 ; i<numTerminals ; ++i) {
@@ -240,8 +249,8 @@ void Application::output(SCFG &G)
       NonterminalProb ntp=*cur;
       String lhs=nonterminals[ntp.nonterminal]->getLexeme();
       float P=ntp.P;
-      if(P>0) cout<<lhs<<" -> '"<<rhs<<"' {"<<P<<"}"<<endl;
-      else cerr<<"DELETED: "<<lhs<<" -> '"<<rhs<<"' {"<<P<<"}"<<endl;
+      if(P>0) os<<lhs<<" -> '"<<rhs<<"' {"<<P<<"}"<<endl;
+      else os<<"//DELETED: "<<lhs<<" -> '"<<rhs<<"' {"<<P<<"}"<<endl;
     }
   }
 }

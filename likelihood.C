@@ -22,6 +22,7 @@ class Application {
   Alphabet alphabet, bgAlphabet;
   BinaryProductions binaryProductions, bgProds;
   void getAlphabet(SCFG &,Alphabet &);
+  float applyWindows(Sequence &,BinaryProductions &,int windowSize);
 public:
   Application();
   int main(int argc,char *argv[]);
@@ -69,15 +70,18 @@ Application::Application()
 int Application::main(int argc,char *argv[])
 {
   // Process command line
-  CommandLine cmd(argc,argv,"b:");
+  CommandLine cmd(argc,argv,"b:w:");
   if(cmd.numArgs()!=2)
     throw String("\n\
 likelihood [options] <grammar.cnf> <seq.fasta>\n\
    -b filename : compute likelihood ratios using bg model from file\n\
+   -w windowsize : use nonoverlapping windows\n\
 ");
   const String grammarFile=cmd.arg(0);
   const String fastaFile=cmd.arg(1);
   const bool wantRatios=cmd.option('b');
+  const bool wantWindows=cmd.option('w');
+  int windowSize=wantWindows ? cmd.optParm('w').asInt() : 0;
 
   // Load and recode grammar using binary productions for fast indexing
   SCFG G(grammarFile);
@@ -94,21 +98,35 @@ likelihood [options] <grammar.cnf> <seq.fasta>\n\
   String def, seqStr;
   while(reader.nextSequence(def,seqStr)) {
     const int L=seqStr.length();
-    if(L==0) throw "zero";
+    if(L==0) throw "empty sequence encountered";
     Sequence seq(seqStr,alphabet);
-    Inside inside(seq,binaryProductions);
-    float lik=inside.likelihood();
-    if(wantRatios) {
-      Inside inside(seq,bgProds);
-      float bgLik=inside.likelihood();
-      lik-=bgLik;
-    }
+    float lik=applyWindows(seq,binaryProductions,windowSize);
+    if(wantRatios) lik-=applyWindows(seq,bgProds,windowSize);
     cout<<lik<<endl;
   }
 
   return 0;
 }
 
+
+
+float Application::applyWindows(Sequence &seq,BinaryProductions &prods,
+				int windowSize)
+{
+  float lik=0;
+  Sequence subseq;
+  int L=seq.getLength();
+  if(windowSize<1) windowSize=L;
+  for(int begin=0 ; begin<L ; begin+=windowSize) {
+    int end=begin+windowSize;
+    if(end>=L) end=L;
+    int len=end-begin;
+    seq.getSubsequence(begin,len,subseq);
+    Inside inside(subseq,prods);
+    lik+=inside.likelihood(); 
+  }
+  return lik;
+}
 
 
 void Application::getAlphabet(SCFG &G,Alphabet &alphabet)
